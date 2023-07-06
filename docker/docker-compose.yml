@@ -1,0 +1,102 @@
+version: '3.7'
+
+services:
+  sentry-redis:
+    image: redis:6.2.4
+    container_name: ${REDIS_CONTAINER}
+    hostname: ${REDIS_CONTAINER}
+    restart: always
+    ports:
+      - '${SENTRY_REDIS_PORT}:6379'
+    command: redis-server --save 20 1 --loglevel warning
+    networks:
+      - sentry
+    volumes:
+      - sentry-redis:/data
+
+  sentry-postgres:
+    image: postgres:latest
+    container_name: sentry-postgres
+    hostname: sentry-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: sentry
+      POSTGRES_PASSWORD: 89PsZXyRStOT2
+      POSTGRES_DB: sentry
+    ports:
+      - '54333:5432'
+    networks:
+      - sentry
+    volumes:
+      - './data/sentry/postgres:/var/lib/postgresql/data'
+      - '../backup/:/var/backup'
+
+  sentry-base:
+    image: sentry:latest
+    container_name: sentry-base
+    hostname: sentry-base
+    restart: always
+    ports:
+      - '9000:9000'
+    env_file:
+      - .env
+    depends_on:
+      - sentry-redis
+      - sentry-postgres
+    networks:
+      - sentry
+    volumes:
+      - './data/sentry/sentry:/var/lib/sentry/files'
+
+  sentry-cron:
+    image: sentry:latest
+    container_name: sentry-cron
+    hostname: sentry-cron
+    restart: always
+    env_file:
+      - .env
+    depends_on:
+      - sentry-redis
+      - sentry-postgres
+    command: "sentry run cron"
+    networks:
+      - sentry
+    volumes:
+      - './data/sentry/sentry:/var/lib/sentry/files'
+
+  sentry-worker:
+    image: sentry:latest
+    container_name: sentry-worker
+    hostname: sentry-worker
+    restart: always
+    env_file:
+      - .env
+    depends_on:
+      - sentry-redis
+      - sentry-postgres
+    command: "sentry run worker"
+    networks:
+      - sentry
+    volumes:
+      - './data/sentry/sentry:/var/lib/sentry/files'
+
+volumes:
+  sentry-redis:
+    name: sentry_redis
+    driver: local
+  sentry-worker:
+    name: sentry_worker
+  sentry-cron:
+    name: sentry_cron
+  sentry-base:
+    name: sentry_base
+  sentry-postgres:
+    name: sentry_postgres
+
+networks:
+  sentry:
+    name: ours
+    ipam:
+      driver: default
+      config:
+        - subnet: ${NETWORK_SUBNET}
